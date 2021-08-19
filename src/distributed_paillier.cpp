@@ -74,14 +74,12 @@ distributed_paillier::__create_share_integer__(CHAR_LIST &secret,
         assert(s <= P);
     }
 
-    ShamirSecretSharingSchemeInteger scheme = ShamirSecretSharingSchemeInteger(P, n, t, kappa);
-    ShamirShares_integer share = scheme.share_secret(NTL::to_ZZ(s));
-    integer_share_scaling_fac = NTL::to_long(share.scaling);
+    NTL::Vec<NTL::Pair<long, NTL::ZZ>> shares = __create_share_integer__(s);
 
     LIST_OF_CHAR_LIST ret;
-    ret.reserve(share.shares.length());
+    ret.reserve(shares.length());
     int i = 0;
-    for (const auto &each_point : share.shares) {
+    for (const auto &each_point : shares) {
         CHAR_LIST one_point;
         bool is_negative;
         ret_char_size[i] = ZZ_2_byte(one_point, each_point.b, is_negative);
@@ -90,6 +88,14 @@ distributed_paillier::__create_share_integer__(CHAR_LIST &secret,
         i++;
     }
     return ret;
+}
+
+NTL::Vec<NTL::Pair<long, NTL::ZZ>>
+distributed_paillier::__create_share_integer__(ZZ &s) {
+    ShamirSecretSharingSchemeInteger scheme = ShamirSecretSharingSchemeInteger(P, n, t, kappa);
+    ShamirShares_integer share = scheme.share_secret(NTL::to_ZZ(s));
+    integer_share_scaling_fac = NTL::to_long(share.scaling);
+    return share.shares;
 }
 
 /**
@@ -156,6 +162,7 @@ distributed_paillier::reshare(const LIST_OF_CHAR_LIST& in_lst,
     return res;
 }
 
+
 /** Compute share part of lambda*beta at point a
  * Return:
  *  res[0] -- lambda_times_beta
@@ -166,8 +173,8 @@ distributed_paillier::reshare(const LIST_OF_CHAR_LIST& in_lst,
  *        this requires the scale factor to be positive.
  */
 LIST_OF_CHAR_LIST
-distributed_paillier::compute_lambda_times_beta_share(LIST_OF_CHAR_LIST in_lst_lambda,
-                                                      LIST_OF_CHAR_LIST in_lst_beta,
+distributed_paillier::compute_lambda_times_beta_share(const LIST_OF_CHAR_LIST& in_lst_lambda,
+                                                      const LIST_OF_CHAR_LIST& in_lst_beta,
                                                       const LIST_OF_BOOL &is_negative_lst_in_lam,
                                                       const LIST_OF_BOOL &is_negative_lst_in_beta,
                                                       const CHAR_LIST &modulu_char,
@@ -192,23 +199,53 @@ distributed_paillier::compute_lambda_times_beta_share(LIST_OF_CHAR_LIST in_lst_l
     return res;
 }
 
-NTL::ZZ
-distributed_paillier::compute_theta_share(const NTL::ZZ &l_times_b,
-                                          const NTL::ZZ &modulu) {
-    return (l_times_b % modulu);
+/**
+ * \brief adding shares of lambda and beta, then compute one share of sum(lambda)*sum(beta)
+ * @param in_lst_lambda shares of lambda_i for one party
+ * @param in_lst_beta shares of beta_i for one party
+ * @param modulu
+ * @param scalar ??
+ * @return
+ */
+std::vector<ZZ>
+distributed_paillier::compute_lambda_times_beta_share(const NTL::Vec<NTL::Pair<long, NTL::ZZ>> & in_lst_lambda,
+                                                      const NTL::Vec<NTL::Pair<long, NTL::ZZ>> & in_lst_beta,
+                                                      const ZZ &modulu,
+                                                      long const &scalar) {
+
+    NTL::Pair<long, NTL::ZZ> lamd = __reshare__(in_lst_lambda, modulu);
+    NTL::Pair<long, NTL::ZZ> beta = __reshare__(in_lst_beta,  modulu);
+    NTL::ZZ lambda_times_beta, theta_share;
+    NTL::mul(lambda_times_beta, lamd.b, beta.b);
+    theta_share = compute_theta_share(lambda_times_beta, modulu);
+    std::vector<ZZ> res;
+    res.reserve(2);
+    res.emplace_back(lambda_times_beta);
+    res.emplace_back(theta_share);
+    return res;
 }
 
+
+
+/**
+ * \brief use all shares of  theta to reconstruct theta
+ * @param theta_shares ALL shares of theta
+ * @param N modulo
+ * @return reconstructed theta
+ */
 NTL::ZZ
 distributed_paillier::reveal_theta(const vector<NTL::ZZ> &theta_shares,
-                                   const NTL::ZZ &N) {
-    assert(theta_shares.size() >= 2 * t + 1);
-    NTL::ZZ nfct = factorial_small(n);
+                                   const NTL::ZZ &N,
+                                   const int & threshold,
+                                   const int & num_party) {
+    assert(theta_shares.size() >= 2 * threshold + 1);
+    NTL::ZZ nfct = factorial_small(num_party);
     NTL::ZZ recon_theta(0);
-    for (long i = 1; i <= 2 * t + 1; i++) {
+    for (long i = 1; i <= 2 * threshold + 1; i++) {
         NTL::ZZ li, tmp;
         NTL::ZZ enume = nfct;
         NTL::ZZ denom = NTL::ZZ(1);
-        for (long j = 1; j <= 2 * t + 1; j++) {
+        for (long j = 1; j <= 2 * threshold + 1; j++) {
             if (i != j) {
                 enume *= j;
                 denom *= j - i;
@@ -467,12 +504,12 @@ distributed_paillier::gene_privkey_standalone(const long &len,
     NTL::GenPrime(q, len);
     NTL::GenPrime(P, len);
     const NTL::ZZ N = p * q;
-    std::cout << "\np = " << p
-              << "; q=" << q
-              << "; N=" << N
-              << "; P=" << P
-              << ";"
-              << endl;
+    // std::cout << "\np = " << p
+    //           << "; q=" << q
+    //           << "; N=" << N
+    //           << "; P=" << P
+    //           << ";"
+    //           << endl;
 
     NTL::Vec<NTL::ZZ> lambda_lst, beta_lst;
     NTL::Vec<NTL::ZZ> pi_lst, qi_lst;
@@ -510,9 +547,9 @@ distributed_paillier::gene_privkey_standalone(const long &len,
     for (long i = 0; i < n; i++) {
         p_sum += pi_lst[i];
         q_sum += qi_lst[i];
-        cout << "pi_lst[" << i << "]  = " << pi_lst[i]
-             << "; qi_lst[" << i << "]  = " << qi_lst[i] << ";"
-             << endl;
+        // cout << "pi_lst[" << i << "]  = " << pi_lst[i]
+        //      << "; qi_lst[" << i << "]  = " << qi_lst[i] << ";"
+        //      << endl;
         assert((pi_lst[i] > 0) && (qi_lst[i] > 0));
     }
     assert(q_sum == q && p_sum == p);
@@ -703,7 +740,32 @@ distributed_paillier::__recv_and_reorganize__(const std::vector<ShamirShares> &s
 }
 
 std::vector<NTL::ZZ>
-distributed_paillier::gene_local_piqi() {
+distributed_paillier::gene_local_piqi_4_first_party(int bit_len, int n) {
+    std::vector<ZZ> ret;
+    ret.reserve(2);
+    long p_q_bit_len = bit_len;
+    // long n_copy = n;
+    // while(n_copy>1) {
+    //     p_q_bit_len --;
+    //     n_copy = n_copy >> 1;
+    // }
+    // p_q_bit_len--;
+    NTL::ZZ tmp;
+    do {
+        tmp = NTL::RandomBits_ZZ(p_q_bit_len);
+//                tmp = 1; // for debug
+    } while (tmp == 0 || ( (tmp%4)!=3) );
+    ret.emplace_back(tmp);
+    do {
+        tmp = NTL::RandomBits_ZZ(p_q_bit_len);
+//                tmp = 1; // for debug
+    } while (tmp == 0 || ( (tmp%4)!=3) );
+    ret.emplace_back(tmp);
+    return ret;
+}
+
+std::vector<NTL::ZZ>
+distributed_paillier::gene_local_piqi_4_other_party(int bit_len, int n)  {
     std::vector<ZZ> ret;
     ret.reserve(2);
     long p_q_bit_len = bit_len;
@@ -717,42 +779,63 @@ distributed_paillier::gene_local_piqi() {
     do {
         tmp = NTL::RandomBits_ZZ(p_q_bit_len);
 //                tmp = 1; // for debug
-    } while (tmp == 0);
+    } while (tmp == 0 || ( (tmp%4)!=0) );
     ret.emplace_back(tmp);
     do {
         tmp = NTL::RandomBits_ZZ(p_q_bit_len);
 //                tmp = 1; // for debug
-    } while (tmp == 0);
+    } while (tmp == 0 || ( (tmp%4)!=0) );
     ret.emplace_back(tmp);
     return ret;
 }
 
 ZZ distributed_paillier::get_rand_4_biprimetest(const ZZ& N) {
     ZZ tmp = NTL::RandomBnd(N);
-    while(NTL::Jacobi(tmp, N) != 1) {
+    while((NTL::Jacobi(tmp, N) != 1 ) || (tmp==0) ) {
         tmp = NTL::RandomBnd(N);
     }
+    // cout << "g = " << tmp << endl;
     return tmp;
 }
 
 ZZ distributed_paillier::biprime_test_step1(int party_id, const ZZ& N, const ZZ& pi, const ZZ& qi,  const ZZ& g) {
+    ZZ tmp(0);
     if(party_id==1) {
-        ZZ tmp =  (N-pi-qi+1);
-        assert(tmp % 4 == 0);
-        return NTL::PowerMod(g, tmp, N);
+         tmp = (N-pi-qi+1);
+         assert(tmp % 4 == 0);
     } else {
-        ZZ tmp =  pi+qi;
-        assert(tmp % 4 == 0);
-        return NTL::PowerMod(g, tmp, N);
+         tmp = pi+qi;
+         assert(tmp % 4 == 0);
     }
+    return NTL::PowerMod(g, tmp/4, N);
 }
 
-bool distributed_paillier::biprime_test_step2(const vector<ZZ>& other_v, const ZZ& v, const long &num_party ) {
-    ZZ tmp = ZZ(0);
+bool distributed_paillier::biprime_test_step2(const vector<ZZ>& other_v, const ZZ& v, const ZZ& N, const long &num_party ) {
+    ZZ tmp = ZZ(1);
+    ZZ product=ZZ(1);
+    //a mod b = (a % b + b) % b
     assert(other_v.size() == num_party-1);
     for(const auto& value : other_v) {
-        tmp *= value;
+        //NTL::MulMod(tmp, tmp, value, N);
+        product = product*value;
+        // cout <<"product = " << product <<"\n";
+        // cout <<" vi = " << value <<"\n";
     }
-    return ( (v==tmp) || (v==-1*tmp) );
+    tmp=(product% N+N)% N;
+   // ZZ v_mod_N = v % N;
+    ZZ v_mod_N=(v % N+ N) % N;
+    // cout << "v = " << v <<"\n"
+    //      << "v_mod_N = " << v_mod_N << "\n"
+    //      << "tmp = " << tmp
+    //      << endl;
+    ZZ ans1=((product+v)%N + N)%N;
+    ZZ ans2=((product-v)%N + N)%N;
+
+    // cout << "ans1 = " << ans1 <<"\n"
+    //      << "ans2 = " << ans2 << "\n"
+    //      << endl;
+    // return ( (v_mod_N==tmp) || (v_mod_N==(-1*tmp)) );
+    return ( (ans1==0)||(ans2==0) );
 }
+
 

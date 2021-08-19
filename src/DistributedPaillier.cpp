@@ -13,7 +13,7 @@ limitations under the License.
 
 #include <vector>
 #include <jni.h>
-#include <omp.h>
+// #include <omp.h>
 #include "../include/com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative.h"
 #include "../include/cppWrapper.hpp"
 #include "../include/DistributedPaillierHepler.h"
@@ -26,10 +26,62 @@ using namespace c_api;
  * Utils
  * ============================
  */
+
+long witness(const ZZ &n, const ZZ &x) {
+    ZZ m, y, z;
+    long j, k;
+    if (x == 0) return 0;
+    // compute m, k such that n-1 = 2^k * m, m odd:
+    k = 1;
+    m = n / 2;
+    while (m % 2 == 0) {
+        k++;
+        m /= 2;
+    }
+    z = PowerMod(x, m, n); // z = x^m % n
+    if (z == 1) return 0;
+    j = 0;
+    do {
+        y = z;
+        z = (y * y) % n;
+        j++;
+    } while (j < k && z != 1);
+    return z != 1 || y != n - 1;
+}
+
+
+long PrimeTest(const ZZ &n, long t) {
+    if (n <= 1) return 0;
+    // first, perform trial division by primes up to 2000
+    PrimeSeq s;  // a class for quickly generating primes in sequence
+    long p;
+    p = s.next();  // first prime is always 2
+    while (p && p < 2000) {
+        if ((n % p) == 0) return (n == p);
+        p = s.next();
+    }
+    // second, perform t Miller-Rabin tests
+    ZZ x;
+    long i;
+    for (i = 0; i < t; i++) {
+        x = RandomBnd(n); // random number between 0 and n-1
+        if (witness(n, x))
+            return 0;
+    }
+    return 1;
+}
+
 template<typename T>
 void __print_vec_as_int__(const std::vector<T> &in) {
     for (auto x : in) {
         std::cout << (int) x << " ";
+    }
+    std::cout << std::endl;
+}
+
+void __print_zz_vec__(const std::vector<ZZ> &in) {
+    for (const auto &x : in) {
+        std::cout << x << " ";
     }
     std::cout << std::endl;
 }
@@ -41,6 +93,14 @@ void __print_cypherVec_as_int__(const std::vector<cypher_text_t> &in) {
         __print_vec_as_int__(x.c);
     }
     std::cout << std::endl;
+}
+
+ZZ geneNoneZeroRandBnd(const ZZ &bnd) {
+    ZZ out(0);
+    while (out == 0) {
+        out = NTL::RandomBnd(bnd);
+    }
+    return out;
 }
 
 jbyteArray as_jbyte_array(JNIEnv *env, const CHAR_LIST &in) {
@@ -242,21 +302,54 @@ void __fill_arrOfByteArray_helper__(JNIEnv *env,
     env->DeleteLocalRef(cls_innerobj);
 }
 
+ZZ signedbyteArray_2_ZZ(JNIEnv *env,
+                        const jobject &SbyteArrayObj) {
+    NTL::ZZ value;
+    CHAR_LIST out_value;
+    bool value_isNeg;
+    __get_SignedbyteArray_helper__(env, SbyteArrayObj, out_value, value_isNeg);
+    distributed_paillier::char_list_2_ZZ(value, out_value, value_isNeg);
+    return value;
+}
+
+std::vector<ZZ> arrOfSignedbyteArray_2_zzList(JNIEnv *env, const jobjectArray &arrOfByteArrayObj) {
+    int array_len = env->GetArrayLength(arrOfByteArrayObj);
+    std::vector<ZZ> ret;
+    ret.reserve(array_len);
+    for (int i = 0; i < array_len; i++) {
+        jobject jobj_signedByteArray = env->GetObjectArrayElement(arrOfByteArrayObj, i);
+        NTL::ZZ value = signedbyteArray_2_ZZ(env, jobj_signedByteArray);
+        env->DeleteLocalRef(jobj_signedByteArray);
+        ret.push_back(value);
+    }
+    return ret;
+}
+
+void fill_SByteArray_with_zz(JNIEnv *env,
+                             jobject &sByteArrayObj,
+                             const ZZ &zz_number) {
+    CHAR_LIST zz_number_in_char;
+    bool zz_number_isNeg;
+    distributed_paillier::ZZ_2_byte(zz_number_in_char, zz_number, zz_number_isNeg);
+    __fill_SByteArray_helper__(env, sByteArrayObj, zz_number_in_char, zz_number_isNeg);
+}
+
+void fill_arrOfSByteArray_with_zz(JNIEnv *env,
+                                  const jobjectArray &arrOfByteArrayObj,
+                                  const ZZ &zz_number,
+                                  const int &idx) {
+    CHAR_LIST zz_number_in_char;
+    bool zz_number_isNeg;
+    distributed_paillier::ZZ_2_byte(zz_number_in_char, zz_number, zz_number_isNeg);
+    __fill_arrOfByteArray_helper__(env, arrOfByteArrayObj, zz_number_in_char, zz_number_isNeg, idx);
+}
+
 /**
  * ============================
  * JNI layer functions
  * ============================
  */
 
-JNIEXPORT jobjectArray JNICALL
-JNICALL
-Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative__1_1create_1share_1_1(JNIEnv *env,
-                                                                                                          jclass cls,
-                                                                                                          jbyteArray secret,
-                                                                                                          jint, jint) {
-    std::cout << "\nRuning from Cpp, not inplemented." << endl;
-    assert(false); // FIXME, not inplemented.
-}
 
 /**
  * Generate Priv and PubKey for all parties
@@ -282,7 +375,7 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
     assert(list_size == (3 * n)); // 每个party有3个bytearray要返回
     assert(ret.size() == n);
     // std::cout << list_size << "\t" << n << endl;
-    std::cout << "ret[0].n = " << ret[0].n << endl;
+    // std::cout << "ret[0].n = " << ret[0].n << endl;
 
     int cnt = 0;
     for (int i = 0; i < n; i++) {
@@ -367,7 +460,7 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
     {
         // int nthreads = omp_get_num_threads();
         // cout << "using parallel?" << " num thread = " << nthreads << endl;
-#pragma omp parallel for shared(c_text_lst)
+//#pragma omp parallel for shared(c_text_lst)
         for (int i = 0; i < len; i++) {
             NTL::ZZ x(body[i]);
             // cypher_text_t ret(bits);
@@ -721,13 +814,29 @@ JNIEXPORT void JNICALL
 Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_genePiQiShares(JNIEnv *env,
                                                                                                    jclass cls,
                                                                                                    jobjectArray piOut,
+                                                                                                   jobject pi, 
                                                                                                    jobjectArray qiOut,
+                                                                                                   jobject qi, 
                                                                                                    jint bit_len,
                                                                                                    jint t,
-                                                                                                   jint num_party) {
+                                                                                                   jint num_party,
+                                                                                                   jint partyID,
+                                                                                                   jobject P_char) {
     jint len = num_party;
-    distributed_paillier key_generator = distributed_paillier(P, num_party, t, bit_len);
-    std::vector<NTL::ZZ> piqi = key_generator.gene_local_piqi();
+    ZZ P = signedbyteArray_2_ZZ(env, P_char);
+    // distributed_paillier key_generator = distributed_paillier(P, num_party, t, bit_len / 2);
+    std::vector<NTL::ZZ> piqi;
+    if (partyID == 1) {
+        piqi = distributed_paillier::gene_local_piqi_4_first_party(bit_len, num_party);
+    } else {
+        piqi = distributed_paillier::gene_local_piqi_4_other_party(bit_len, num_party);
+    }
+
+    // debug
+    // piqi[0] = 1;
+    // piqi[1] = 2;
+    // cout << "pi, qi = ";
+    // __print_zz_vec__(piqi);
 
     ShamirSecretSharingScheme scheme = ShamirSecretSharingScheme(P, num_party, t);
     ShamirShares share_p = scheme.share_secret(piqi[0]);
@@ -737,21 +846,23 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
     assert(share_q.shares.length() == num_party);
 
     // fill results in java side vectors
+    fill_SByteArray_with_zz(env, pi, piqi[0]);
+    fill_SByteArray_with_zz(env, qi, piqi[1]);
     for (int i = 0; i < len; i++) {
-        CHAR_LIST pi_char, qi_char;
-        bool pi_isNeg, qi_isNeg;
-        assert(share_p.shares.get(i).a == i+1);
-        assert(share_q.shares.get(i).a == i+1);
-        distributed_paillier::ZZ_2_byte(pi_char, share_p.shares.get(i).b, pi_isNeg);
-        distributed_paillier::ZZ_2_byte(qi_char, share_q.shares.get(i).b, qi_isNeg);
-        __fill_arrOfByteArray_helper__(env, piOut, pi_char, pi_isNeg, i);
-        __fill_arrOfByteArray_helper__(env, qiOut, qi_char, qi_isNeg, i);
+        // debug
+        // cout << "pi(" << i + 1 << ") =  " << share_p.shares.get(i).b << "\t";
+        // cout << "qi(" << i + 1 << ") =  " << share_q.shares.get(i).b << "\t";
+
+
+        fill_arrOfSByteArray_with_zz(env, piOut, share_p.shares.get(i).b, i);
+        fill_arrOfSByteArray_with_zz(env, qiOut, share_q.shares.get(i).b, i);
     }
+    // cout << "\n" << endl;
 }
 
-ZZ get_sumP_share(const std::vector<ZZ>& reorganized_pb) {
+ZZ get_sumP_share(const std::vector<ZZ> &reorganized_pb) {
     ZZ tmp = ZZ(0);
-    for(const auto& pib: reorganized_pb) {
+    for (const auto &pib: reorganized_pb) {
         tmp += pib;
     }
 
@@ -765,22 +876,23 @@ ZZ get_sumP_share(const std::vector<ZZ>& reorganized_pb) {
 
 JNIEXPORT void JNICALL
 Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_geneNShares(JNIEnv *env,
-                                                                                            jclass cls,
-                                                                                            jobjectArray allPiShares,
-                                                                                            jobjectArray allQiShares,
-                                                                                            jobject N_share_out,
-                                                                                            jint bit_len,
-                                                                                            jint t,
-                                                                                            jint num_party) {
-    jint len = num_party;
+                                                                                                jclass cls,
+                                                                                                jobjectArray allPiShares,
+                                                                                                jobjectArray allQiShares,
+                                                                                                jobject N_share_out,
+                                                                                                jint bit_len,
+                                                                                                jint t,
+                                                                                                jint num_party,
+                                                                                                jobject P_char) {
     jint pi_share_list_size = env->GetArrayLength(allPiShares);
     jint qi_share_list_size = env->GetArrayLength(allQiShares);
 
-    assert((pi_share_list_size == num_party ) && (qi_share_list_size == num_party ));
+    assert((pi_share_list_size == num_party) && (qi_share_list_size == num_party));
 
     std::vector<ZZ> reorganized_pb, reorganized_qb;
     reorganized_pb.reserve(pi_share_list_size);
     reorganized_qb.reserve(qi_share_list_size);
+
     for (int i = 0; i < num_party; i++) {
         NTL::ZZ pi_share_zz, qi_share_zz;
         CHAR_LIST in_pi_shares, in_qi_shares;
@@ -791,13 +903,26 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
         distributed_paillier::char_list_2_ZZ(qi_share_zz, in_qi_shares, in_qi_isNeg);
         reorganized_pb.push_back(pi_share_zz);
         reorganized_qb.push_back(qi_share_zz);
-    }
-    ZZ N_share_part = NTL::MulMod(get_sumP_share(reorganized_qb), get_sumP_share(reorganized_pb), P);
 
-    CHAR_LIST N_share_part_char;
-    bool N_share_part_isNeg;
-    distributed_paillier::ZZ_2_byte(N_share_part_char, N_share_part, N_share_part_isNeg);
-    __fill_SByteArray_helper__(env, N_share_out, N_share_part_char, N_share_part_isNeg);
+        // debug
+        // cout << "pi(" << i + 1 << ") =  " << pi_share_zz << "\t";
+        // cout << "qi(" << i + 1 << ") =  " << qi_share_zz << "\t";
+    }
+    // cout << endl;
+
+    ZZ P = signedbyteArray_2_ZZ(env, P_char);
+    ZZ N_share_part = NTL::MulMod(get_sumP_share(reorganized_qb), get_sumP_share(reorganized_pb), P);
+    fill_SByteArray_with_zz(env, N_share_out, N_share_part);
+
+    // cout << "N_share = " << N_share_part
+    //      << " get_sumP_share(reorganized_qb) = " << get_sumP_share(reorganized_qb)
+    //      << " get_sumP_share(reorganized_pb) = " << get_sumP_share(reorganized_pb)
+    //      << endl;
+
+//    CHAR_LIST N_share_part_char;
+//    bool N_share_part_isNeg;
+//    distributed_paillier::ZZ_2_byte(N_share_part_char, N_share_part, N_share_part_isNeg);
+//    __fill_SByteArray_helper__(env, N_share_out, N_share_part_char, N_share_part_isNeg);
 }
 
 JNIEXPORT void JNICALL
@@ -807,14 +932,14 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
                                                                                             jobject N_out,
                                                                                             jint bit_len,
                                                                                             jint t,
-                                                                                            jint num_party) {
-    jint len = num_party;
+                                                                                            jint num_party,
+                                                                                            jobject P_char) {
     jint allNShares_size = env->GetArrayLength(allNShares);
 
-    assert((allNShares_size == num_party ));
+    assert((allNShares_size == num_party));
 
     std::vector<ZZ> N_shares_b;
-    NTL::Vec<NTL::Pair<long, ZZ>>  N_share;
+    NTL::Vec<NTL::Pair<long, ZZ>> N_share;
     N_shares_b.reserve(allNShares_size);
     for (int i = 0; i < allNShares_size; i++) {
         NTL::ZZ N_share_zz;
@@ -824,14 +949,33 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
         distributed_paillier::char_list_2_ZZ(N_share_zz, N_share_char, N_share_isNeg);
 
         // note that i+1 should be consistent with the real A value of the reconstruction points.
-        N_share.append( NTL::Pair<long, ZZ>(i+1,  N_share_zz));
+        N_share.append(NTL::Pair<long, ZZ>(i + 1, N_share_zz));
+
+        // cout << "N_share = " << N_share_zz << "\t";
     }
-    ZZ N_zz = ShamirShares(N_share, P, num_party, t).reconstruct_secret(P);
+    // cout << endl;
+
+    ZZ P = signedbyteArray_2_ZZ(env, P_char);
+
+    // NOTE: degree of N's shares should be t*2 !
+    ZZ N_zz = ShamirShares(N_share, P, num_party, t * 2).reconstruct_secret(P);
 
     CHAR_LIST N_char;
     bool N_isNeg;
     distributed_paillier::ZZ_2_byte(N_char, N_zz, N_isNeg);
     __fill_SByteArray_helper__(env, N_out, N_char, N_isNeg);
+
+    // cout << "N = " << N_zz << endl;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_getRand4Biprimetest(JNIEnv *env,
+                                                                                                        jclass cls,
+                                                                                                        jobject out,
+                                                                                                        jobject N_char) {
+    ZZ N = signedbyteArray_2_ZZ(env, N_char);
+    // cout << "g _init = " << N << endl;
+    fill_SByteArray_with_zz(env, out, distributed_paillier::get_rand_4_biprimetest(N));
 }
 
 /*
@@ -842,12 +986,19 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
 JNIEXPORT void JNICALL
 Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_biPrimeTestStage1(JNIEnv *env,
                                                                                                       jclass cls,
-                                                                                                      jobject N,
-                                                                                                      jobject pi,
-                                                                                                      jobject qi,
-                                                                                                      jobject g,
-                                                                                                      jobject v,
+                                                                                                      jobject N_char,
+                                                                                                      jobject pi_char,
+                                                                                                      jobject qi_char,
+                                                                                                      jobject g_char,
+                                                                                                      jobject v_char,
                                                                                                       jint partyId) {
+    ZZ N = signedbyteArray_2_ZZ(env, N_char);
+    ZZ pi = signedbyteArray_2_ZZ(env, pi_char);
+    ZZ qi = signedbyteArray_2_ZZ(env, qi_char);
+    ZZ g = signedbyteArray_2_ZZ(env, g_char);
+    ZZ v = distributed_paillier::biprime_test_step1(partyId, N, pi, qi, g);
+    // cout << "v = " << v << endl;
+    fill_SByteArray_with_zz(env, v_char, v);
 }
 
 /*
@@ -855,11 +1006,383 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
  * Method:    biPrimeTestStage2
  * Signature: ([Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;IJ)V
  */
-JNIEXPORT void JNICALL
-Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_biPrimeTestStage2 (JNIEnv *env,
-                                                                                                       jclass cls,
-                                                                                                       jobjectArray other_v,
-                                                                                                       jobject v,
-                                                                                                       jint out,
-                                                                                                       jlong n){
+JNIEXPORT jlong  JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_biPrimeTestStage2(JNIEnv *env,
+                                                                                                      jclass cls,
+                                                                                                      jobjectArray other_v_char,
+                                                                                                      jobject v_char,
+                                                                                                      jobject N_char,
+                                                                                                      jlong num_party) {
+    ZZ N = signedbyteArray_2_ZZ(env, N_char);
+    std::vector<ZZ> other_v = arrOfSignedbyteArray_2_zzList(env, other_v_char);
+    ZZ v = signedbyteArray_2_ZZ(env, v_char);
+    if(distributed_paillier::biprime_test_step2(other_v, v, N, num_party)){
+        return 1;
+    } else {
+        return 0;
+    }
 }
+
+
+/*
+ * Class:     com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative
+ * Method:    geneLambdaBetaShares
+ * Signature: ([Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;[Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;III)V
+ */
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_geneLambdaBetaShares(JNIEnv *env,
+                                                                                                         jclass cls,
+                                                                                                         jobjectArray lambdaiOut,
+                                                                                                         jobjectArray betaiOut,
+                                                                                                         jobject N_char,
+                                                                                                         jobject pi_char,
+                                                                                                         jobject qi_char,
+                                                                                                         jint party_id,
+                                                                                                         jint bit_len,
+                                                                                                         jint t,
+                                                                                                         jint num_party,
+                                                                                                         jobject P_char) {
+    ZZ lambda, beta;
+    ZZ pi = signedbyteArray_2_ZZ(env, pi_char);
+    ZZ qi = signedbyteArray_2_ZZ(env, qi_char);
+    ZZ N = signedbyteArray_2_ZZ(env, N_char);
+    if (party_id == 1) {
+        lambda = N - pi - qi + 1;
+    } else {
+        lambda = -pi - qi;
+    }
+    do {
+//        beta = NTL::RandomBnd(N);
+        beta = 1; // for debug
+    } while (beta == 0);
+    ZZ P = signedbyteArray_2_ZZ(env, P_char);
+
+    // debug
+    // cout << "geneLambdaBetaShares\t"
+    //      << "P = " << P << "\t"
+    //      << "lambda = " << lambda << "\t"
+    //      << "pi = " << pi << "\t"
+    //      << "qi = " << qi << "\t"
+    //      << endl;
+
+    ShamirSecretSharingSchemeInteger scheme = ShamirSecretSharingSchemeInteger(P, num_party, t);
+    ShamirShares_integer share_lambda = scheme.share_secret(lambda);
+    ShamirShares_integer share_beta = scheme.share_secret(beta);
+    assert(share_lambda.shares.length() == num_party);
+    assert(share_beta.shares.length() == num_party);
+
+    // fill results in java side vectors
+    for (int i = 0; i < num_party; i++) {
+        assert(share_lambda.shares.get(i).a == i + 1);
+        assert(share_beta.shares.get(i).a == i + 1);
+
+        // cout << "share_lambda = " << share_lambda.shares.get(i).b << "\t"
+        //      << "share_beta = " << share_beta.shares.get(i).b << "\t";
+
+        fill_arrOfSByteArray_with_zz(env, lambdaiOut, share_lambda.shares.get(i).b, i);
+        fill_arrOfSByteArray_with_zz(env, betaiOut, share_beta.shares.get(i).b, i);
+    }
+    // cout << "\n" << endl;
+}
+
+/*
+ * Class:     com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative
+ * Method:    geneLambdaTimesBetaShares
+ * Signature: ([Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;[Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;III)V
+ */
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_geneLambdaTimesBetaShares(
+        JNIEnv *env,
+        jclass cls,
+        jobjectArray lambdaSumShares,
+        jintArray lambda_a,
+        jobjectArray betaSumShares,
+        jintArray beta_a,
+        jobject N_char,
+        jobject lambdaTimesBetaShareOut,
+        jobject thetaOut,
+        jint num_party) {
+
+    // get data from JAVA
+    std::vector<ZZ> in_lst_lambda_b = arrOfSignedbyteArray_2_zzList(env, lambdaSumShares);
+    std::vector<ZZ> in_lst_beta_b = arrOfSignedbyteArray_2_zzList(env, betaSumShares);
+
+    jint *body_lambda_a = env->GetIntArrayElements(lambda_a, 0);
+    jint *body_beta_a = env->GetIntArrayElements(beta_a, 0);
+    assert((in_lst_lambda_b.size() == in_lst_beta_b.size())
+           && (in_lst_beta_b.size() == env->GetArrayLength(lambda_a))
+           && (in_lst_beta_b.size() == env->GetArrayLength(beta_a))
+           && (in_lst_beta_b.size() == num_party));
+
+    // prepare args
+    NTL::Vec<NTL::Pair<long, NTL::ZZ>> in_lst_lambda, in_lst_beta;
+    for (int i = 0; i < in_lst_lambda_b.size(); i++) {
+        in_lst_lambda.append(NTL::Pair<long, ZZ>(body_lambda_a[i], in_lst_lambda_b[i]));
+        in_lst_beta.append(NTL::Pair<long, ZZ>(body_beta_a[i], in_lst_beta_b[i]));
+
+        // cout << "body_lambda_a[i] = " << body_lambda_a[i] << " in_lst_lambda_b[i] = " << in_lst_lambda_b[i] << "\n"
+        //      << "body_beta_a[i] = " << body_beta_a[i] << " in_lst_beta_b[i] = " << in_lst_beta_b[i]
+        //      << endl;
+    }
+    ZZ N = signedbyteArray_2_ZZ(env, N_char);
+    long scalar = NTL::to_long(factorial_small(num_party));
+    std::vector<ZZ> ret = distributed_paillier::compute_lambda_times_beta_share(in_lst_lambda,
+                                                                                in_lst_beta,
+                                                                                N,
+                                                                                scalar);
+    // cout << "lambdaTimesBetaShareOut, thetaOut =  " << "\t";
+    // __print_zz_vec__(ret);
+
+    // write back
+    fill_SByteArray_with_zz(env, lambdaTimesBetaShareOut, ret[0]);
+    fill_SByteArray_with_zz(env, thetaOut, ret[1]);
+}
+
+/*
+ * Class:     com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative
+ * Method:    revealThetaGeneKeys
+ * Signature: ([Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;III)V
+ */
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_revealThetaGeneKeys(JNIEnv *env,
+                                                                                                        jclass cls,
+                                                                                                        jobjectArray allThetaShares,
+                                                                                                        jintArray theta_a,
+                                                                                                        jobject thetaOut,
+                                                                                                        jobject N_char,
+                                                                                                        jint t,
+                                                                                                        jint n) {
+    // get data from JAVA
+    ZZ theta_invmod;
+    ZZ N = signedbyteArray_2_ZZ(env, N_char);
+    jint *body_theta_a = env->GetIntArrayElements(theta_a, 0);
+    jint array_size = env->GetArrayLength(theta_a);
+    std::vector<NTL::ZZ> theta_shares_raw = arrOfSignedbyteArray_2_zzList(env, allThetaShares);
+    std::vector<NTL::ZZ> theta_shares;
+    theta_shares.resize(array_size);
+    assert(theta_shares.size() == array_size);
+
+    // prepare args
+    for (int i = 0; i < array_size; i++) {
+        assert((body_theta_a[i] > 0) && (body_theta_a[i] <= array_size));
+        theta_shares[body_theta_a[i] - 1] = theta_shares_raw[i];
+    }
+
+    ZZ theta = distributed_paillier::reveal_theta(theta_shares, N, t, n);
+    NTL::InvMod(theta_invmod, theta, N);
+
+    // write back
+    fill_SByteArray_with_zz(env, thetaOut, theta_invmod);
+}
+
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_getLargePrime(JNIEnv *env,
+                                                                                                  jclass cls,
+                                                                                                  jobject out,
+                                                                                                  jint in) {
+    ZZ P;
+    NTL::GenPrime(P, in);
+    fill_SByteArray_with_zz(env, out, P);
+    // cout << "P = " << P << endl;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_getLargeComposite(JNIEnv *env,
+                                                                                                      jclass cls,
+                                                                                                      jobject out,
+                                                                                                      jint in) {
+    fill_SByteArray_with_zz(env, out, NTL::RandomLen_ZZ(in / 2) * NTL::RandomLen_ZZ(in / 2));
+}
+
+// test function
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_testIO
+        (JNIEnv *env, jclass cls, jobject out, jobject in) {
+    ZZ data = signedbyteArray_2_ZZ(env, in);
+    fill_SByteArray_with_zz(env, out, data);
+}
+
+// test function
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_testIOVec
+        (JNIEnv *env, jclass cls, jobjectArray out, jobjectArray in) {
+    std::vector<ZZ> data = arrOfSignedbyteArray_2_zzList(env, in);
+    int i = 0;
+    for (const auto &elem : data) {
+        fill_arrOfSByteArray_with_zz(env, out, elem, i);
+        i++;
+    }
+}
+
+// test function
+JNIEXPORT void JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_geneNFromPQProduct
+        (JNIEnv *env, jclass cls, jint num_party, jobject n_out, jobjectArray piOut, jobjectArray qiOut, jobject pIn,
+         jobject qIn) {
+    NTL::Vec<NTL::ZZ> pi_lst, qi_lst;
+    ZZ p = signedbyteArray_2_ZZ(env, pIn);
+    ZZ q = signedbyteArray_2_ZZ(env, qIn);
+    ZZ p_sum(0), q_sum(0);
+    for (long i = 1; i < num_party; i++) {
+        pi_lst.append(geneNoneZeroRandBnd(p / num_party));
+        qi_lst.append(geneNoneZeroRandBnd(q / num_party));
+        p_sum += pi_lst[i - 1];
+        q_sum += qi_lst[i - 1];
+    }
+    pi_lst.append(p - p_sum);
+    qi_lst.append(q - q_sum);
+
+    // check qi, pi correctness
+    p_sum = 0;
+    q_sum = 0;
+
+    for (int i = 0; i < num_party; i++) {
+        fill_arrOfSByteArray_with_zz(env, piOut, pi_lst[i], i);
+        fill_arrOfSByteArray_with_zz(env, qiOut, qi_lst[i], i);
+    }
+    fill_SByteArray_with_zz(env, n_out, p * q);
+
+    for (long i = 0; i < num_party; i++) {
+        p_sum += pi_lst[i];
+        q_sum += qi_lst[i];
+        // cout << "pi = " << pi_lst[i] << " qi = " << qi_lst[i] << endl;
+        assert((pi_lst[i] > 0) && (qi_lst[i] > 0));
+    }
+    // cout << "p*q = " << p * q << endl;
+    assert(q_sum == q && p_sum == p);
+}
+
+// test function
+// beta is fixed to be 1
+JNIEXPORT jboolean JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_checkCorrectness
+        (JNIEnv *env, jclass cls, jobject pIn, jobject qIn, jobject N_char,
+         jobjectArray lambdaTimesBetaShareChar, jobject thetaChar, jint n, jint t) {
+    ZZ p = signedbyteArray_2_ZZ(env, pIn);
+    ZZ q = signedbyteArray_2_ZZ(env, qIn);
+    ZZ N = signedbyteArray_2_ZZ(env, N_char);
+    ZZ nfct = factorial_small(n);
+    ZZ theta = signedbyteArray_2_ZZ(env, thetaChar);
+    vector<ZZ> lambdaTimesBetaShareVector = arrOfSignedbyteArray_2_zzList(env, lambdaTimesBetaShareChar);
+    NTL::Vec<ZZ> lambdaTimesBetaShare;
+    for (const auto &elem: lambdaTimesBetaShareVector) {
+        lambdaTimesBetaShare.append(elem);
+    }
+
+    NTL::ZZ recon_lamb_times_beta(0);
+    NTL::ZZ recon_theta(0);
+    for (long i = 1; i <= 2 * t + 1; i++) {
+        NTL::ZZ li, tmp;
+        NTL::ZZ enume = nfct;
+        NTL::ZZ denom = NTL::ZZ(1);
+        for (long j = 1; j <= 2 * t + 1; j++) {
+            if (i != j) {
+                enume *= j;
+                denom *= j - i;
+            }
+        }
+        NTL::div(li, enume, denom);
+        NTL::mul(tmp, li, lambdaTimesBetaShare[i - 1]);
+        NTL::add(recon_lamb_times_beta, recon_lamb_times_beta, tmp); // this reconstruction does not mod N
+    }
+
+    NTL::InvMod(theta, theta, N);
+
+    // cout << "\nreconLambdaTimesBeta = " << recon_lamb_times_beta << "\t"
+    //      << "LambdaTimesBeta = " << (N - p - q + 1) * 3 * nfct * sqr(nfct) << "\n"
+    //      << "theta = " << theta << "\t"
+    //      << "reconLambdaTimesBeta % N = " << recon_lamb_times_beta % N << "\n"
+    //      << "N = " << N
+    //      << endl;
+    return ((N - p - q + 1) * 3 * nfct * sqr(nfct) == recon_lamb_times_beta) && (theta == recon_lamb_times_beta % N);
+}
+
+// test function
+//generate p,a without pum
+JNIEXPORT void  JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_getLargePrime4Test
+        (JNIEnv *env, jclass cls, jobject pOut, jobjectArray piOut, jint bitLen, jint numParty) {
+    std::vector<ZZ> pi_list;
+    pi_list.resize(numParty);
+    ZZ p_sum(0);
+    while((p_sum==0) || (PrimeTest(p_sum, 40)==0)) {
+        p_sum = ZZ(0);
+        for (int i = 0; i < numParty; i++) {
+            NTL::ZZ tmp;
+            if (i == 0) {
+                do {
+                    tmp = NTL::RandomBits_ZZ(bitLen);
+                } while (tmp == 0 || ( (tmp%4)!=3) );
+            } else {
+                do {
+                    tmp = NTL::RandomBits_ZZ(bitLen);
+                } while (tmp == 0 || ( (tmp%4)!=0) );
+            }
+            pi_list[i] = tmp;
+            p_sum += tmp;
+        }
+    }
+    fill_SByteArray_with_zz(env, pOut, p_sum);
+    for(int i = 0; i < numParty; i++) {
+        fill_arrOfSByteArray_with_zz(env, piOut, pi_list[i], i) ;
+    }
+    // cout << "p_sum = " << p_sum << endl;
+    // cout << "pi List = ";
+    // __print_zz_vec__(pi_list);
+}
+
+
+// test function
+JNIEXPORT void  JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_getLargeComposite4Test
+        (JNIEnv *env, jclass cls, jobject pOut, jobjectArray piOut, jint bitLen, jint numParty) {
+    std::vector<ZZ> pi_list;
+    pi_list.resize(numParty);
+    ZZ p_sum(0);
+    while((p_sum==0) || (PrimeTest(p_sum, 40)==1)) {
+        p_sum = ZZ(0);
+        for (int i = 0; i < numParty; i++) {
+            NTL::ZZ tmp;
+            if (i == 0) {
+                do {
+                    tmp = NTL::RandomBits_ZZ(bitLen);
+                } while ((tmp == 0 )|| ( (tmp%4)!=3) );
+            } else {
+                do {
+                    tmp = NTL::RandomBits_ZZ(bitLen);
+                } while ((tmp == 0) || ( (tmp%4)!=0) );
+            }
+            pi_list[i] = tmp;
+            p_sum += tmp;
+        }
+    }
+    fill_SByteArray_with_zz(env, pOut, p_sum);
+    for(int i = 0; i < numParty; i++) {
+        fill_arrOfSByteArray_with_zz(env, piOut, pi_list[i], i) ;
+    }
+    // cout << "pi = " << p_sum << "   ========" << endl;
+}
+
+JNIEXPORT void  JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_zzaTimeszzb
+        (JNIEnv *env, jclass cls, jobject a, jobject b, jobject out) {
+    ZZ N = signedbyteArray_2_ZZ(env, a)* signedbyteArray_2_ZZ(env, b);
+    // cout << "N = " << N << endl;
+    fill_SByteArray_with_zz(env,out,N);
+}
+
+JNIEXPORT jlong  JNICALL
+Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_checkPiSumPrime
+(JNIEnv *env, jclass cls, jobjectArray listIn) {
+    std::vector<ZZ> listIn_zz = arrOfSignedbyteArray_2_zzList(env, listIn);
+    ZZ pi_sum(0);
+    for(auto value : listIn_zz) {
+        pi_sum += value;
+    }
+
+    // cout << "sum_value = " << pi_sum;
+    return PrimeTest(pi_sum, 80);
+}
+
+
+

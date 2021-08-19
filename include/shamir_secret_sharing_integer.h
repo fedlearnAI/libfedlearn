@@ -63,10 +63,10 @@ public:
     };
 
     NTL::ZZ
-    reconstruct_secret(NTL::ZZ N); // the Paillier modulu;
+    reconstruct_secret(const NTL::ZZ& N); // the Paillier modulu;
 
     NTL::Vec<NTL::Pair<long, NTL::ZZ>>
-    get_partial_recon(NTL::ZZ N);
+    get_partial_recon(const NTL::ZZ& N);
 
     ShamirShares_integer
     __add__(ShamirShares_integer other);

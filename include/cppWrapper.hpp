@@ -77,10 +77,12 @@ namespace c_api {
     }
 
     /**
-     * devide one data
+     * divide one data
      */
     inline void div(cypher_text_t &res, const cypher_text_t &a, const ZZ &b, const dist_paillier_pubkey_t &pk) {
         distributed_paillier::div(res, a, b, pk);
     }
+
+
 
 } // namespace c_api

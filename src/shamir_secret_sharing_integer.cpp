@@ -24,7 +24,8 @@ ShamirSecretSharingSchemeInteger::share_secret(const NTL::ZZ &s) {
 
     NTL::ZZ poly_param_bound = 2 * randomness_interval + 1;
     for (int i = 1; i < t + 1; i++) {
-        poly_param.append(NTL::RandomBnd(poly_param_bound));
+//        poly_param.append(NTL::RandomBnd(poly_param_bound));
+        poly_param.append(ZZ(1));  // for debug and test
     }
 
     // get n points from the polynomial
@@ -47,7 +48,7 @@ ShamirSecretSharingSchemeInteger::share_secret(const NTL::ZZ &s) {
 
 
 NTL::ZZ
-ShamirShares_integer::reconstruct_secret(NTL::ZZ modulu) {
+ShamirShares_integer::reconstruct_secret(const NTL::ZZ& modulu) {
     if (shares.length() < degree + 1) {
         std::cout << "no enough points for recon. Need = " +
                      to_string(degree + 1) + ", get = " + to_string(shares.length())
@@ -65,12 +66,12 @@ ShamirShares_integer::reconstruct_secret(NTL::ZZ modulu) {
     }
     NTL::ZZ tmp;
     NTL::InvMod(tmp, scaling * n_fac, modulu);
-    NTL::MulMod(res, partial_recon_sum, tmp, P);
+    NTL::MulMod(res, partial_recon_sum, tmp, modulu);
     return res;
 }
 
 NTL::Vec<NTL::Pair<long, NTL::ZZ>>
-ShamirShares_integer::get_partial_recon(NTL::ZZ modulu) {
+ShamirShares_integer::get_partial_recon(const NTL::ZZ& modulu) {
     if (shares.length() < degree + 1) {
         std::cout << "no enough points for recon. Need = " + to_string(degree + 1) + ", get = " +
                      to_string(shares.length()) << endl;
@@ -153,7 +154,7 @@ ShamirShares_integer ShamirShares_integer::__mult__(long K) {
 
 bool ShamirShares_integer::__check_points_in_order__(NTL::Vec<NTL::Pair<long, NTL::ZZ>> &input) {
     long i = 1;
-    for (auto x : input) {
+    for (const auto& x : input) {
         if (x.a != i) {
             std::cout << "Input points are not in order of 1, 2, ..., t+1" << endl;
             return false;

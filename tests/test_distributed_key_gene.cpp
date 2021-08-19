@@ -86,8 +86,8 @@ TEST_F(params, TestDistKeyGene) {
     sum_p = ZZ(0);
     sum_q = ZZ(0);
     for(auto i = 0; i < n; i++) {
-        pi_lst.emplace_back(key_generator.gene_local_piqi()[0]);
-        qi_lst.emplace_back(key_generator.gene_local_piqi()[1]);
+        pi_lst.emplace_back(distributed_paillier::gene_local_piqi_4_first_party(bit_len, n)[0]);
+        qi_lst.emplace_back(distributed_paillier::gene_local_piqi_4_first_party(bit_len, n)[1]);
         ASSERT_TRUE((pi_lst[i] > 0) && (qi_lst[i] > 0));
 
         ShamirSecretSharingScheme scheme = ShamirSecretSharingScheme(P, n, t);
@@ -117,10 +117,12 @@ TEST_F(params, TestDistKeyGene) {
     }
     cout << ShamirShares(sum_q_share, P, n, t).reconstruct_secret(P) << " "
     << ShamirShares(sum_p_share, P, n, t).reconstruct_secret(P) << " "
-    << ShamirShares(sum_q_share, P, n, t).__mult__(ShamirShares(sum_p_share, P, n, t)).reconstruct_secret(P)
+    << ShamirShares(sum_q_share, P, n, t).__mult__(ShamirShares(sum_p_share, P, n, t)).reconstruct_secret(P) << " "
+    << ShamirShares(N_share, P, n, t).reconstruct_secret(P)
     << endl;
 
     ASSERT_EQ(sum_q*sum_p, ShamirShares(sum_q_share, P, n, t).__mult__(ShamirShares(sum_p_share, P, n, t)).reconstruct_secret(P));
+    ASSERT_EQ(ShamirShares(N_share, P, n, t*2).reconstruct_secret(P), sum_q*sum_p);
 }
 
 

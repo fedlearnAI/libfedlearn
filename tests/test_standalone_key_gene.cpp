@@ -163,7 +163,7 @@ TEST(test_enc_dec_arithmatic, test_generate_priv_key) {
 
     ZZ p_sum(0), q_sum(0);
     for (long i = 1; i <= n; i++) {
-        paillier_class_lst.emplace_back(modulu_char, n, t);
+        paillier_class_lst.emplace_back(N, n, t, len);
     }
     for (long i = 1; i < n; i++) {
         pi_lst.append(NTL::RandomBnd(p / n));
@@ -192,7 +192,7 @@ TEST(test_enc_dec_arithmatic, test_generate_priv_key) {
         NTL::ZZ tmp;
         do {
             tmp = NTL::RandomBnd(N);
-            tmp = 1;
+//            tmp = 1;
         } while (tmp == 0);
         beta_lst.append(tmp);
 
@@ -294,9 +294,9 @@ TEST(test_enc_dec_arithmatic, test_generate_priv_key) {
         NTL::add(recon_lamb_times_beta, recon_lamb_times_beta, tmp);
         NTL::AddMod(recon_theta, recon_theta, li * theta_lst[i - 1], N);
     }
-    NTL::ZZ scaler_inv;
-    NTL::InvMod(scaler_inv, nfct * sqr(nfct), N);
-    NTL::MulMod(recon_theta, recon_theta, scaler_inv, N);
+    NTL::ZZ scalar_inv;
+    NTL::InvMod(scalar_inv, nfct * sqr(nfct), N);
+    NTL::MulMod(recon_theta, recon_theta, scalar_inv, N);
     NTL::MulMod(recon_theta, recon_theta, nfct * sqr(nfct), N);
 
     NTL::ZZ lambda_lst_sum(0), beta_lst_sum(0);

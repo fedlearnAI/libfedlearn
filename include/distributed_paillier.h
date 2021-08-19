@@ -154,10 +154,10 @@ public:
     static ZZ biprime_test_step1(int party_id, const ZZ& N, const ZZ& pi, const ZZ& qi,  const ZZ& g);
 
     // this can be done on only one party
-    static bool biprime_test_step2(const vector<ZZ>& other_v, const ZZ& v, const long &num_party );
+    static bool biprime_test_step2(const vector<ZZ>& other_v, const ZZ& v, const ZZ& N, const long &num_party );
 
 
-    LIST_OF_CHAR_LIST
+        LIST_OF_CHAR_LIST
     create_lambda_share(CHAR_LIST &secret,
                         bool &is_neg_in,
                         vector<long> &ret_char_size,
@@ -170,8 +170,8 @@ public:
                       vector<bool> &is_negative_lst);
 
     LIST_OF_CHAR_LIST
-    compute_lambda_times_beta_share(LIST_OF_CHAR_LIST in_lst_lambda,
-                                    LIST_OF_CHAR_LIST in_lst_beta,
+    compute_lambda_times_beta_share(const LIST_OF_CHAR_LIST& in_lst_lambda,
+                                    const LIST_OF_CHAR_LIST& in_lst_beta,
                                     const LIST_OF_BOOL &is_negative_lst_in_lam,
                                     const LIST_OF_BOOL &is_negative_lst_in_beta,
                                     const CHAR_LIST &modulu_char,
@@ -181,21 +181,21 @@ public:
                                     bool &theta_is_negative_out,
                                     long const &scalar);
 
-    static NTL::ZZ
-    compute_theta_share(const NTL::ZZ &l_times_b, const NTL::ZZ &modulu);
+    inline static NTL::ZZ
+    compute_theta_share(const NTL::ZZ &l_times_b,
+                                              const NTL::ZZ &modulu) {
+        return (l_times_b % modulu);
+    }
 
-    std::vector<NTL::ZZ> gene_local_piqi();
+    static std::vector<NTL::ZZ> gene_local_piqi_4_first_party(int bit_len, int n);
+    static std::vector<NTL::ZZ> gene_local_piqi_4_other_party(int bit_len, int n);
 
     /**
-     * \short given N and theta shares, reconstruct the pubkey -- theta
-     * @param theta_shares shares of theta
-     * @param N sum(pi)*sum(qi)
-     * @param scalar
-     * @return
+     * \brief use all shares of  theta to reconstruct theta
+     * @param theta_shares ALL shares of theta
+     * @param N modulo
+     * @return reconstructed theta
      */
-    NTL::ZZ
-    reveal_theta(const vector<NTL::ZZ> &theta_shares,
-                 const NTL::ZZ &N);
 
 
     void static enc(cypher_text_t &cypher_text,
@@ -288,6 +288,23 @@ public:
                             std::vector<ZZ> &reorganized_b,
                             LIST_OF_LONG &reorganized_a,
                             long num_party, long i);
+
+
+    Vec<Pair<long, NTL::ZZ>> __create_share_integer__(ZZ &s);
+
+    /**
+     * \brief adding shares of lambda and beta, then compute one share of sum(lambda)*sum(beta)
+     * @param in_lst_lambda shares of lambda_i for one party
+     * @param in_lst_beta shares of beta_i for one party
+     * @param modulu
+     * @param scalar scalar generated when multiplying 2 shares
+     * @return
+     */
+    static vector<ZZ> compute_lambda_times_beta_share(const Vec<NTL::Pair<long, NTL::ZZ>> &in_lst_lambda,
+                                               const Vec<NTL::Pair<long, NTL::ZZ>> &in_lst_beta, const ZZ &modulu,
+                                               const long &scalar);
+
+    static ZZ reveal_theta(const vector<NTL::ZZ> &theta_shares, const ZZ &N, const int &threshold, const int &num_party);
 };
 
 #endif //DIST_PAI_H

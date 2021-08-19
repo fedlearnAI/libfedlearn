@@ -17,11 +17,14 @@ limitations under the License.
 
 ShamirShares ShamirSecretSharingScheme::share_secret(const NTL::ZZ &s) {
     NTL::Vec<NTL::Pair<long, NTL::ZZ>> shares;
-    NTL::ZZ f0(s);
+    const NTL::ZZ& f0(s);
     NTL::Vec<NTL::ZZ> poly_param;
 
     for (int i = 1; i < t + 1; i++) {
-        poly_param.append(NTL::RandomBnd(P));
+//        poly_param.append(NTL::RandomBnd(P));
+
+        // debug
+        poly_param.append(ZZ(1));
     }
 
     // get n points from the polynomial
