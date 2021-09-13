@@ -6,10 +6,15 @@
 ## Install guide
 
 1. 静态编译 libntl 
+cd (package root directory)
+cd third_party_lib/ntl-main/src
 ./configure PREFIX='../../libntl' NTL_THREADS=on NTL_THREAD_BOOST=on 
 make CXXFLAGS=-fPIC -j4
 make install
-build libDistPaillier:
+
+2. build libDistPaillier
+cd (package root directory)/libfedlearn/
+mkdir build
 cd build
 
 // release mode
@@ -20,7 +25,7 @@ cmake -DCMAKE_BUILD_TYPE=Debug   ..
 make clean
 make CXXFLAGS=-O3 -j4
 
-2. 在JAVA Run/Debug Configuration 中
+3. 在JAVA Run/Debug Configuration 中
 VM options 加入-ea -Djava.library.path=./src/main/cxx/build
 
 

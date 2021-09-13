@@ -13,8 +13,8 @@ limitations under the License.
 
 #include <iostream>
 #include <vector>
-#include "../include/NTL/ZZ.h"
-#include "../include/gtest/gtest.h"
+#include "../include/third_party/NTL/ZZ.h"
+#include "../include/third_party/gtest/gtest.h"
 #include "../include/distributed_paillier.h"
 
 class params : public ::testing::Test {
