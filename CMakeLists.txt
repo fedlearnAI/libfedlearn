@@ -16,8 +16,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # STATIC_COMPILE_CMD=""
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 	set(STATIC_COMPILE_CMD "-static -static-libc++")
+	set(GMP_STATIC_LIB
+      "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libgmp/lib/libgmp.dylib")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 	set(STATIC_COMPILE_CMD "-static-libgcc -static-libstdc++")
+	set(GMP_STATIC_LIB "gmp")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
 	set(STATIC_COMPILE_CMD "-static-libgcc -static-libstdc++")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -46,8 +49,8 @@ include_directories("./include")
 
 FILE(GLOB SC_FILES "./src/*")
 
-set(GMP_STATIC_LIB
-	"${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libgmp/lib/libgmp.dylib")
+#set(GMP_STATIC_LIB
+#	"${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libgmp/lib/libgmp.dylib")
 set(NTL_STATIC_LIB "${INSTALL_DIR}/libntl.a")
 message("1NTL_STATIC_LIB = ${NTL_STATIC_LIB}")
 
