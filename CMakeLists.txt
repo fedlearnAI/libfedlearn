@@ -12,12 +12,12 @@ include_directories("/usr/include/x86_64-linux-gnu/")
 include_directories("./thirdparty/ntl-11.4.3/include")
 include_directories("./include")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
+message("CMAKE_CXX_COMPILER_ID= ${CMAKE_CXX_COMPILER_ID}")
 # STATIC_COMPILE_CMD=""
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-	set(STATIC_COMPILE_CMD "-static -static-libc++")
-	set(GMP_STATIC_LIB
-      "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libgmp/lib/libgmp.dylib")
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+	# set(STATIC_COMPILE_CMD "-static")
+	set(STATIC_COMPILE_CMD "")
+	set(GMP_STATIC_LIB "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libgmp/lib/libgmp.dylib")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 	set(STATIC_COMPILE_CMD "-static-libgcc -static-libstdc++")
 	set(GMP_STATIC_LIB "gmp")
@@ -39,11 +39,9 @@ ExternalProject_Add(
   INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/lib
 )
 ExternalProject_Add_StepTargets(libntl install)
-ExternalProject_Get_property(libntl SOURCE_DIR)
-message("Source dir of myExtProj = ${SOURCE_DIR}")
 ExternalProject_Get_property(libntl INSTALL_DIR)
 message("Source dir of myExtProj = ${INSTALL_DIR}")
-
+message("GMP_STATIC_LIB = ${GMP_STATIC_LIB}")
 
 include_directories("./include")
 
