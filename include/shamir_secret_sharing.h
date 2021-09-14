@@ -15,10 +15,10 @@ limitations under the License.
 #include <stdlib.h>
 #include <stdexcept>
 #include <assert.h>
-#include "../include/third_party/NTL/ZZ.h"
-#include "../include/third_party/NTL/vector.h"
-#include "../include/third_party/NTL/pair.h"
-#include "../include/third_party/NTL/tools.h"
+#include "../include/NTL/ZZ.h"
+#include "../include/NTL/vector.h"
+#include "../include/NTL/pair.h"
+#include "../include/NTL/tools.h"
 
 using namespace std;
 using namespace NTL;

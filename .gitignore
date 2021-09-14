@@ -19,6 +19,9 @@ project/
 .DS_Store
 .DS_Store?
 
+.vscode
+.idea
+
 
 # Package Files #
 *.jar
@@ -37,3 +40,6 @@ private.key
 public.key
 
 build/
+CMakeFiles/
+cmake-build-debug/
+cmake-build-debug-coverage/

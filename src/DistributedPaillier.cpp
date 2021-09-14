@@ -357,7 +357,8 @@ void fill_arrOfSByteArray_with_zz(JNIEnv *env,
  * Parameters
  *  arrObj: JAVA obj to be filled by native code. 
  *          MUST be initialized before passing to native !
- * Return: void. JAVA object fields are filled in native layer.
+ * Return
+ *  void. JAVA object fields are filled in native layer.
  */
 JNIEXPORT void JNICALL
 JNICALL
@@ -924,7 +925,7 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
 //    __fill_SByteArray_helper__(env, N_share_out, N_share_part_char, N_share_part_isNeg);
 }
 
-JNIEXPORT jlong JNICALL
+JNIEXPORT void JNICALL
 Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_revealN(JNIEnv *env,
                                                                                             jclass cls,
                                                                                             jobjectArray allNShares,
@@ -963,7 +964,8 @@ Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNat
     bool N_isNeg;
     distributed_paillier::ZZ_2_byte(N_char, N_zz, N_isNeg);
     __fill_SByteArray_helper__(env, N_out, N_char, N_isNeg);
-    return NTL::NumBits(N_zz);
+
+    // cout << "N = " << N_zz << endl;
 }
 
 JNIEXPORT void JNICALL

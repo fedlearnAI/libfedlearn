@@ -20,8 +20,8 @@ limitations under the License.
 #include <cassert>
 #include <vector>
 #include <chrono>
-#include "../include/third_party/NTL/ZZ.h"
-#include "../include/third_party/NTL/ZZ_p.h"
+#include "NTL/ZZ.h"
+#include "NTL/ZZ_p.h"
 #include "../include/distributed_paillier.h"
 #include "shamir_secret_sharing.h"
 #include "shamir_secret_sharing_integer.h"
