@@ -13,14 +13,13 @@ include_directories("./thirdparty/ntl-11.4.3/include")
 include_directories("./include")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 message("CMAKE_CXX_COMPILER_ID= ${CMAKE_CXX_COMPILER_ID}")
-# STATIC_COMPILE_CMD=""
+
+set(POSTFIX "so")
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-	# set(STATIC_COMPILE_CMD "-static")
 	set(STATIC_COMPILE_CMD "")
-	set(GMP_STATIC_LIB "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libgmp/lib/libgmp.dylib")
+	set(POSTFIX "dylib")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 	set(STATIC_COMPILE_CMD "-static-libgcc -static-libstdc++")
-	set(GMP_STATIC_LIB "gmp")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
 	set(STATIC_COMPILE_CMD "-static-libgcc -static-libstdc++")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -28,22 +27,44 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 endif()
 
 
+find_library(GMP_LIB gmp)
+if (NOT GMP_LIB)
+    message("not found gmp")
+    include(ExternalProject)
+    ExternalProject_Add(
+        libgmp
+        PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/
+        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/gmp-6.2.1/
+        CONFIGURE_COMMAND
+		${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/gmp-6.2.1/configure "--prefix=${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/"
+        BUILD_COMMAND make "CXXFLAGS=-fPIC"
+        BUILD_IN_SOURCE 1
+		INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/
+    )
+    ExternalProject_Get_property(libgmp INSTALL_DIR)
+	set(GMP_LIB "${INSTALL_DIR}/lib/libgmp.${POSTFIX}")
+else() 
+    message("found gmp")
+	message("gmp_lib=${GMP_LIB}")
+endif ()
+
+message("gmp_lib=${GMP_LIB}")
 include(ExternalProject)
 ExternalProject_Add(
   libntl
   PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/
   SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src
   CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src/configure "PREFIX=${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/"
-  BUILD_COMMAND make "CXXFLAGS=-fPIC"
+  BUILD_COMMAND make "CXXFLAGS=-fPIC -L/${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/lib"
   BUILD_IN_SOURCE 1
   INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/lib
 )
+add_dependencies(libntl libgmp)
 ExternalProject_Add_StepTargets(libntl install)
 ExternalProject_Get_property(libntl INSTALL_DIR)
 message("Source dir of myExtProj = ${INSTALL_DIR}")
 message("GMP_STATIC_LIB = ${GMP_STATIC_LIB}")
 
-include_directories("./include")
 
 FILE(GLOB SC_FILES "./src/*")
 
@@ -67,7 +88,7 @@ message("CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
 add_library(Distpaillier SHARED ${SC_FILES})
 add_dependencies(Distpaillier libntl)
 message("GMP_STATIC_LIB=${GMP_STATIC_LIB}")
-target_link_libraries(Distpaillier ${NTL_STATIC_LIB} m ${GMP_STATIC_LIB} pthread ${STATIC_COMPILE_CMD})
+target_link_libraries(Distpaillier ${NTL_STATIC_LIB} m ${GMP_LIB} pthread ${STATIC_COMPILE_CMD})
 set_target_properties(Distpaillier PROPERTIES VERSION ${PROJECT_VERSION})
 
 
@@ -89,7 +110,7 @@ FOREACH (file ${TEST_FILES})
 	add_executable("validate_${i}" ${SC_FILES} ${file})
     add_dependencies(validate_0 libntl)
 	target_link_libraries("validate_${i}" ${NTL_STATIC_LIB}
-		${GTEST_BOTH_LIBRARIES} m ${GMP_STATIC_LIB} pthread gtest ${STATIC_COMPILE_CMD})
+		${GTEST_BOTH_LIBRARIES} m ${GMP_LIB} pthread gtest ${STATIC_COMPILE_CMD})
     math(EXPR i "${i} + 1")
 ENDFOREACH ()
 
