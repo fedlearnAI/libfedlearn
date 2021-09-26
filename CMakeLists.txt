@@ -26,11 +26,10 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	set(STATIC_COMPILE_CMD "-static-libgcc -static-libstdc++")
 endif()
 
-
+include(ExternalProject)
 find_library(GMP_LIB gmp)
 if (NOT GMP_LIB)
     message("not found gmp")
-    include(ExternalProject)
     ExternalProject_Add(
         libgmp
         PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/
@@ -43,23 +42,35 @@ if (NOT GMP_LIB)
     )
     ExternalProject_Get_property(libgmp INSTALL_DIR)
 	set(GMP_LIB "${INSTALL_DIR}/lib/libgmp.${POSTFIX}")
+	message("gmp_lib=${GMP_LIB}")
+    ExternalProject_Add(
+      libntl
+      PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src
+      CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src/configure "PREFIX=${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/"
+      BUILD_COMMAND make "CXXFLAGS=-fPIC -L/${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/lib"
+      BUILD_IN_SOURCE 1
+      INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/lib
+    )
+    add_dependencies(libntl libgmp)
 else() 
     message("found gmp")
 	message("gmp_lib=${GMP_LIB}")
+	message("gmp_lib=${GMP_LIB}")
+    include(ExternalProject)
+    ExternalProject_Add(
+       libntl
+       PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/
+       SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src
+       CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src/configure "PREFIX=${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/"
+       BUILD_COMMAND make "CXXFLAGS=-fPIC -L/${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/lib"
+       BUILD_IN_SOURCE 1
+       INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/lib
+    )
 endif ()
 
 message("gmp_lib=${GMP_LIB}")
-include(ExternalProject)
-ExternalProject_Add(
-  libntl
-  PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/
-  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src
-  CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ntl-11.4.3/src/configure "PREFIX=${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/"
-  BUILD_COMMAND make "CXXFLAGS=-fPIC -L/${CMAKE_CURRENT_SOURCE_DIR}/build/libgmp/lib"
-  BUILD_IN_SOURCE 1
-  INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build/libntl/lib
-)
-add_dependencies(libntl libgmp)
+#add_dependencies(libntl libgmp)
 ExternalProject_Add_StepTargets(libntl install)
 ExternalProject_Get_property(libntl INSTALL_DIR)
 message("Source dir of myExtProj = ${INSTALL_DIR}")
