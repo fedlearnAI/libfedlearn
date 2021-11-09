@@ -135,7 +135,7 @@ extern "C"
  * Method:    revealN
  * Signature: ([Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;Lcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;IIILcom/jdt/fedlearn/core/encryption/distributedPaillier/DistributedPaillierNative/signedByteArray;)V
  */
-        JNIEXPORT void JNICALL Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_revealN(JNIEnv *, jclass, jobjectArray, jobject, jint, jint, jint, jobject);
+        JNIEXPORT jlong JNICALL Java_com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative_revealN(JNIEnv *, jclass, jobjectArray, jobject, jint, jint, jint, jobject);
 
         /*
  * Class:     com_jdt_fedlearn_core_encryption_distributedPaillier_DistributedPaillierNative

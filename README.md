@@ -5,30 +5,29 @@
 
 ## 安装指南
 
-本项目依赖
-
-#### 1.系统和编辑器要求
+#### 1. 系统和编辑器要求
 
 1. 本项目使用cmake作为编译工具，需要先安装cmake，详情参考cmake官网。
 2. 依赖libm，pthread等包，大部分Linux和Mac平台已内置，如果出现包缺失，请手动安装。
 3. 目前我们只对部分平台和编译期进行了验证，包括
    - Linux平台  Ubuntu 18，Ubuntu 20 ，编译器采用GCC 9.3
-   - MacOS 平台 MacOS 10.14， 10.15 编译期 Clang 11.0
-   - Windows平台   to be continued
+   - MacOS 平台 MacOS 10.14， 10.15 编译器 Clang 11.0
+   - Windows平台 暂不支持 
 
-#### 2. 编译与链接
-
+#### 2. 配置与预编译
 - 切换到项目根目录并执行配置
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release  # 如需采用debug模式，将 Release替换为Debug
 ```
-- 编译和链接
+执行后会生成build目录
+#### 3. 编译与链接
+有两种编译方式，使用cmake命令编译或者根据生成的makefile编译
+- 使用cmake编译
 ```bash
 cmake --build build
 ```
-
+- 使用make编译
 如果想指定make参数，进行精细配置，也可以采用make方式编译
-
 ```bash
 cd ./build
 make clean
@@ -40,9 +39,7 @@ make CXXFLAGS=-O3 -j4
 ```shell
 libdistpaillier.so # macos系统中是libdistpaillier.dylib
 ```
-
 文件，复制到算法包中即可作为JNI的依赖使用，操作详情参考fedlearn项目README
-
 
 
 ## 参考文献: 
